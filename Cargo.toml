@@ -1,0 +1,10 @@
+[package]
+name = "streak"
+version = "0.1.0"
+edition = "2021"
+description = "Writes a daily Rust log entry and commits it, keeping the contribution graph active."
+
+[dependencies]
+
+[profile.release]
+opt-level = "s"

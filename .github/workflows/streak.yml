@@ -1,0 +1,48 @@
+name: streak
+
+on:
+  # OpenClaw triggers this daily from your machine (see openclaw/ in README).
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "Optional note to add to today's log entry"
+        required: false
+        default: ""
+  # Fallback if OpenClaw/your PC is off. The binary skips if today is already logged.
+  schedule:
+    - cron: "17 16 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: streak
+  cancel-in-progress: false
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --quiet
+
+      - name: Configure git author
+        # The author email must belong to your account or the commits won't turn the graph green.
+        run: |
+          git config user.name "Kolgrim33"
+          git config user.email "252664188+Kolgrim33@users.noreply.github.com"
+
+      - name: Write log and commit
+        env:
+          STREAK_NOTE: ${{ github.event.inputs.note }}
+          STREAK_MAX: "4"
+        run: cargo run --release --quiet
+
+      - name: Push
+        run: git push origin HEAD:main
