@@ -1,10 +1,14 @@
 //! streak: appends today's entry to the monthly Rust log and commits it.
 //!
-//! Usage: streak [--dry-run] [--force] [--note "text"]
+//! Usage: streak [--dry-run] [--force] [--if-empty] [--note "text"]
 //!
 //! Env:
 //!   STREAK_NOTE  note to log (OpenClaw passes this through workflow_dispatch)
-//!   STREAK_MAX   max commits per day, default 4 (count varies by date for shading)
+//!   STREAK_MAX   daily cap on commits, default 4
+//!
+//! Each run makes ONE commit. The OpenClaw trigger calls it at 1-4 random
+//! times a day. `--if-empty` (used by the GitHub fallback cron) only commits
+//! when the day has no commits yet.
 //!   STREAK_DATE  override the date as YYYY-MM-DD (testing)
 
 use std::env;
@@ -90,10 +94,6 @@ fn day_hash(date: &Date) -> u64 {
     })
 }
 
-fn commits_for(date: &Date, max: u64) -> u64 {
-    1 + day_hash(date) % max.max(1)
-}
-
 fn tip_for(date: &Date) -> &'static str {
     TIPS[(day_hash(date) >> 8) as usize % TIPS.len()]
 }
@@ -134,52 +134,69 @@ fn main() {
         .map(|n| n.trim().replace('\n', " "))
         .filter(|n| !n.is_empty());
 
+    let if_empty = args.iter().any(|a| a == "--if-empty");
     let path = format!("log/{}.md", date.month());
     let header = format!("## {}", date.iso());
     let existing = fs::read_to_string(&path).unwrap_or_default();
+    let done = day_count(&existing, &header);
 
-    if existing.lines().any(|l| l == header) && !force {
-        println!("streak: {} already logged, nothing to do", date.iso());
+    if if_empty && done > 0 && !force {
+        println!("streak: {} already has {done} commit(s), fallback not needed", date.iso());
+        return;
+    }
+    if done >= max && !force {
+        println!("streak: {} hit the daily cap of {max}, nothing to do", date.iso());
         return;
     }
 
-    let n = commits_for(&date, max);
-    println!("streak: {} -> {n} commit(s)", date.iso());
-    if dry_run {
-        println!("{header}\n- tip: {}", tip_for(&date));
+    let i = done + 1;
+    let body = if done == 0 {
+        let mut s = if existing.is_empty() {
+            format!("# Rust log {}\n", date.month())
+        } else {
+            String::new()
+        };
+        s.push_str(&format!("\n{header}\n\n- tip: {}\n", tip_for(&date)));
         if let Some(n) = &note {
-            println!("- note: {n}");
+            s.push_str(&format!("- note: {n}\n"));
         }
+        s
+    } else {
+        match &note {
+            Some(n) => format!("- checkpoint {i}: {n}\n"),
+            None => format!("- checkpoint {i}\n"),
+        }
+    };
+
+    println!("streak: {} commit #{i}", date.iso());
+    if dry_run {
+        print!("{body}");
         return;
     }
 
     fs::create_dir_all(Path::new(&path).parent().unwrap()).expect("create log dir");
-    for i in 1..=n {
-        let mut f = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .expect("open log file");
-        let body = if i == 1 {
-            let mut s = if existing.is_empty() {
-                format!("# Rust log {}\n", date.month())
-            } else {
-                String::new()
-            };
-            s.push_str(&format!("\n{header}\n\n- tip: {}\n", tip_for(&date)));
-            if let Some(n) = &note {
-                s.push_str(&format!("- note: {n}\n"));
-            }
-            s
-        } else {
-            format!("- checkpoint {i}/{n}\n")
-        };
-        f.write_all(body.as_bytes()).expect("write log");
-        drop(f);
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .expect("open log file");
+    f.write_all(body.as_bytes()).expect("write log");
+    drop(f);
 
-        git(&["add", &path]);
-        git(&["commit", "-q", "-m", &format!("log: {} ({i}/{n})", date.iso())]);
+    git(&["add", &path]);
+    git(&["commit", "-q", "-m", &format!("log: {} #{i}", date.iso())]);
+}
+
+/// Commits already made for the day: 1 for the header, plus one per checkpoint line.
+fn day_count(log: &str, header: &str) -> u64 {
+    let mut lines = log.lines().skip_while(|l| *l != header);
+    if lines.next().is_none() {
+        return 0;
     }
+    1 + lines
+        .take_while(|l| !l.starts_with("## "))
+        .filter(|l| l.starts_with("- checkpoint"))
+        .count() as u64
 }
 
 #[cfg(test)]
@@ -207,11 +224,11 @@ mod tests {
     }
 
     #[test]
-    fn commit_count_in_range() {
-        for z in 20_000..20_400 {
-            let c = commits_for(&civil_from_days(z), 4);
-            assert!((1..=4).contains(&c));
-        }
-        assert_eq!(commits_for(&civil_from_days(0), 0), 1);
+    fn counts_commits_per_day() {
+        let log = "# Rust log 2026-11\n\n## 2026-11-07\n\n- tip: x\n- checkpoint 2\n\n## 2026-11-08\n\n- tip: y\n- checkpoint 2: hi\n- checkpoint 3\n";
+        assert_eq!(day_count(log, "## 2026-11-07"), 2);
+        assert_eq!(day_count(log, "## 2026-11-08"), 3);
+        assert_eq!(day_count(log, "## 2026-11-09"), 0);
+        assert_eq!(day_count("", "## 2026-11-09"), 0);
     }
 }

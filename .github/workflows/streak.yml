@@ -8,9 +8,9 @@ on:
         description: "Optional note to add to today's log entry"
         required: false
         default: ""
-  # Fallback if OpenClaw/your PC is off. The binary skips if today is already logged.
+  # Fallback if OpenClaw/your PC is off all day: only commits if today has no commits yet.
   schedule:
-    - cron: "17 16 * * *"
+    - cron: "23 21 * * *"   # 23:23 Harare
 
 permissions:
   contents: write
@@ -42,7 +42,12 @@ jobs:
         env:
           STREAK_NOTE: ${{ github.event.inputs.note }}
           STREAK_MAX: "4"
-        run: cargo run --release --quiet
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            cargo run --release --quiet -- --if-empty
+          else
+            cargo run --release --quiet
+          fi
 
       - name: Push
         run: git push origin HEAD:main

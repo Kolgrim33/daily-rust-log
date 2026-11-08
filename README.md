@@ -2,17 +2,17 @@
 
 A daily Rust log, written and committed by a small Rust binary (`streak`) running in GitHub Actions.
 
-Each day gets one entry in `log/YYYY-MM.md` with a Rust tip and an optional note. The binary makes 1 to 4 commits per day; the count comes from a hash of the date, so the graph has varied shading.
+Each day gets one entry in `log/YYYY-MM.md` with a Rust tip. Each run of the binary makes one commit, with a cap of 4 per day.
 
 ## How it runs
 
-1. **OpenClaw (main trigger).** An OpenClaw automation on my machine runs `openclaw/trigger.sh` every day. The script calls `gh workflow run` to dispatch the workflow.
-2. **GitHub cron (fallback).** The workflow also runs on a schedule at 16:17 UTC. If OpenClaw has already logged the day, the binary sees today's entry and does nothing.
+1. **OpenClaw (main trigger).** An OpenClaw automation runs `openclaw/trigger.sh` every 10 minutes. On its first run each day the script picks 1 to 4 random times between 08:00 and 22:59, and dispatches the workflow once as each time passes. So both the commit count and the commit times change every day. `trigger.sh --show` prints today's plan; `trigger.sh --now` dispatches right away.
+2. **GitHub cron (fallback).** The workflow also runs at 21:23 UTC with `--if-empty`, which only commits if the day has no commits yet (for days the PC is off).
 
 ## Set up the OpenClaw automation
 
 ```sh
-openclaw cron add --name "GitHub streak" --cron "0 9 * * *" --tz Africa/Harare \
+openclaw cron add --name "GitHub streak" --cron "*/10 * * * *" --tz Africa/Harare \
   --command "$HOME/Documents/daily-rust-log/openclaw/trigger.sh"
 ```
 
