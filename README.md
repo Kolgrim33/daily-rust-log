@@ -1,5 +1,7 @@
 # daily-rust-log
 
+[![GitHub Streak](https://streak-stats.demolab.com/?user=Kolgrim33&theme=dark&background=0D1117&border=30363D&stroke=30363D&ring=E8B730&fire=E8B730&currStreakNum=F1E9D2&sideNums=F1E9D2&currStreakLabel=E8B730&sideLabels=A9AECB&dates=7C8CC4)](https://github.com/Kolgrim33/daily-rust-log)
+
 A daily Rust log, written and committed by a small Rust binary (`streak`) running in GitHub Actions.
 
 Each day gets one entry in `log/YYYY-MM.md` with a Rust tip. Each run of the binary makes one commit, with a cap of 4 per day.
