@@ -8,9 +8,13 @@ on:
         description: "Optional note to add to today's log entry"
         required: false
         default: ""
-  # Fallback if OpenClaw/your PC is off all day: only commits if today has no commits yet.
+  # Scheduled safety net across the day (Harare is UTC+2):
+  # 07:15 UTC -> 09:15 Harare (morning)
+  # 11:30 UTC -> 13:30 Harare (midday)
+  # 15:45 UTC -> 17:45 Harare (afternoon)
+  # 20:20 UTC -> 22:20 Harare (evening)
   schedule:
-    - cron: "23 21 * * *"   # 23:23 Harare
+    - cron: "15 7,11,15,20 * * *"
 
 permissions:
   contents: write
@@ -43,11 +47,9 @@ jobs:
           STREAK_NOTE: ${{ github.event.inputs.note }}
           STREAK_MAX: "4"
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            cargo run --release --quiet -- --if-empty
-          else
-            cargo run --release --quiet
-          fi
+          cargo run --release --quiet
 
       - name: Push
-        run: git push origin HEAD:main
+        run: |
+          git pull --rebase origin main
+          git push origin HEAD:main

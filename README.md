@@ -9,7 +9,7 @@ Each day gets one entry in `log/YYYY-MM.md` with a Rust tip. Each run of the bin
 ## How it runs
 
 1. **OpenClaw (main trigger).** An OpenClaw automation runs `openclaw/trigger.sh` every 10 minutes. On its first run each day the script picks 1 to 4 random times between 08:00 and 22:59, and dispatches the workflow once as each time passes. So both the commit count and the commit times change every day. `trigger.sh --show` prints today's plan; `trigger.sh --now` dispatches right away.
-2. **GitHub cron (fallback).** The workflow also runs at 21:23 UTC with `--if-empty`, which only commits if the day has no commits yet (for days the PC is off).
+2. **GitHub cron (safety net).** The workflow runs automatically at 4 schedule slots across the day (09:15, 13:30, 17:45, and 22:20 Harare time) up to the daily cap of 4 commits, ensuring multiple contributions even if the PC is off or OpenClaw is paused.
 
 ## Set up the OpenClaw automation
 
