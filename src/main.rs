@@ -1,15 +1,12 @@
 //! streak: appends today's entry to the monthly Rust log and commits it.
 //!
-//! Usage: streak [--dry-run] [--force] [--if-empty] [--note "text"]
+//! Usage: streak [--dry-run] [--force] [--if-empty] [--count N] [--note "text"]
 //!
 //! Env:
-//!   STREAK_NOTE  note to log (OpenClaw passes this through workflow_dispatch)
-//!   STREAK_MAX   daily cap on commits, default 4
-//!
-//! Each run makes ONE commit. The OpenClaw trigger calls it at 1-4 random
-//! times a day. `--if-empty` (used by the GitHub fallback cron) only commits
-//! when the day has no commits yet.
-//!   STREAK_DATE  override the date as YYYY-MM-DD (testing)
+//!   STREAK_NOTE   note to log (OpenClaw passes this through workflow_dispatch)
+//!   STREAK_MAX    daily cap on commits, default 20 (or 15..=20 via daily_target)
+//!   STREAK_COUNT  number of commits to make in this invocation, default 1
+//!   STREAK_DATE   override the date as YYYY-MM-DD (testing)
 
 use std::env;
 use std::fs::{self, OpenOptions};
@@ -98,6 +95,11 @@ fn tip_for(date: &Date) -> &'static str {
     TIPS[(day_hash(date) >> 8) as usize % TIPS.len()]
 }
 
+/// Deterministic daily target between 15 and 20 commits inclusive.
+fn daily_target(date: &Date) -> u64 {
+    15 + (day_hash(date) % 6)
+}
+
 fn git(args: &[&str]) {
     let status = Command::new("git").args(args).status().unwrap_or_else(|e| {
         eprintln!("streak: failed to run git: {e}");
@@ -117,6 +119,11 @@ fn main() {
         .iter()
         .position(|a| a == "--note")
         .and_then(|i| args.get(i + 1).cloned());
+    let arg_count = args
+        .iter()
+        .position(|a| a == "--count")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|v| v.parse::<u64>().ok());
 
     let date = match env::var("STREAK_DATE") {
         Ok(s) => Date::parse(&s).unwrap_or_else(|| {
@@ -128,7 +135,11 @@ fn main() {
     let max: u64 = env::var("STREAK_MAX")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(4);
+        .unwrap_or_else(|| daily_target(&date));
+    let count: u64 = arg_count
+        .or_else(|| env::var("STREAK_COUNT").ok().and_then(|v| v.parse().ok()))
+        .unwrap_or(1)
+        .max(1);
     let note = arg_note
         .or_else(|| env::var("STREAK_NOTE").ok())
         .map(|n| n.trim().replace('\n', " "))
@@ -138,53 +149,71 @@ fn main() {
     let path = format!("log/{}.md", date.month());
     let header = format!("## {}", date.iso());
     let existing = fs::read_to_string(&path).unwrap_or_default();
-    let done = day_count(&existing, &header);
+    let mut done = day_count(&existing, &header);
 
     if if_empty && done > 0 && !force {
-        println!("streak: {} already has {done} commit(s), fallback not needed", date.iso());
+        println!(
+            "streak: {} already has {done} commit(s), fallback not needed",
+            date.iso()
+        );
         return;
     }
     if done >= max && !force {
-        println!("streak: {} hit the daily cap of {max}, nothing to do", date.iso());
+        println!(
+            "streak: {} hit the daily cap of {max}, nothing to do",
+            date.iso()
+        );
         return;
     }
 
-    let i = done + 1;
-    let body = if done == 0 {
-        let mut s = if existing.is_empty() {
-            format!("# Rust log {}\n", date.month())
-        } else {
-            String::new()
-        };
-        s.push_str(&format!("\n{header}\n\n- tip: {}\n", tip_for(&date)));
-        if let Some(n) = &note {
-            s.push_str(&format!("- note: {n}\n"));
-        }
-        s
+    let mut is_first_for_file = existing.is_empty();
+    let iterations = if force {
+        count
     } else {
-        match &note {
-            Some(n) => format!("- checkpoint {i}: {n}\n"),
-            None => format!("- checkpoint {i}\n"),
-        }
+        count.min(max.saturating_sub(done))
     };
 
-    println!("streak: {} commit #{i}", date.iso());
-    if dry_run {
-        print!("{body}");
-        return;
+    for step in 0..iterations {
+        let i = done + 1;
+        let body = if done == 0 {
+            let mut s = if is_first_for_file {
+                is_first_for_file = false;
+                format!("# Rust log {}\n", date.month())
+            } else {
+                String::new()
+            };
+            s.push_str(&format!("\n{header}\n\n- tip: {}\n", tip_for(&date)));
+            if let Some(n) = &note {
+                s.push_str(&format!("- note: {n}\n"));
+            }
+            s
+        } else {
+            match &note {
+                Some(n) if step == 0 => format!("- checkpoint {i}: {n}\n"),
+                _ => format!("- checkpoint {i}\n"),
+            }
+        };
+
+        println!("streak: {} commit #{i}", date.iso());
+        if dry_run {
+            print!("{body}");
+            done += 1;
+            continue;
+        }
+
+        fs::create_dir_all(Path::new(&path).parent().unwrap()).expect("create log dir");
+        let mut f = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .expect("open log file");
+        f.write_all(body.as_bytes()).expect("write log");
+        drop(f);
+
+        git(&["add", &path]);
+        git(&["commit", "-q", "-m", &format!("log: {} #{i}", date.iso())]);
+        done += 1;
     }
-
-    fs::create_dir_all(Path::new(&path).parent().unwrap()).expect("create log dir");
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .expect("open log file");
-    f.write_all(body.as_bytes()).expect("write log");
-    drop(f);
-
-    git(&["add", &path]);
-    git(&["commit", "-q", "-m", &format!("log: {} #{i}", date.iso())]);
 }
 
 /// Commits already made for the day: 1 for the header, plus one per checkpoint line.
@@ -230,5 +259,17 @@ mod tests {
         assert_eq!(day_count(log, "## 2026-11-08"), 3);
         assert_eq!(day_count(log, "## 2026-11-09"), 0);
         assert_eq!(day_count("", "## 2026-11-09"), 0);
+    }
+
+    #[test]
+    fn daily_target_varies_between_15_and_20() {
+        let mut seen = std::collections::HashSet::new();
+        for day in 1..=30 {
+            let date = Date { y: 2026, m: 11, d: day };
+            let target = daily_target(&date);
+            assert!((15..=20).contains(&target), "got {target}");
+            seen.insert(target);
+        }
+        assert!(seen.len() > 1, "expected daily_target to vary across days");
     }
 }

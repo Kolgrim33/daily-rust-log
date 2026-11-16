@@ -24,7 +24,7 @@ dispatch() {
 if [ "${1:-}" = "--now" ]; then dispatch "${2:-manual}"; exit 0; fi
 
 if [ ! -f "$PLAN" ]; then
-  n=$(( $(rand) % 4 + 1 ))
+  n=$(( $(rand) % 6 + 15 ))
   i=0
   while [ $i -lt $n ]; do echo $(( 480 + $(rand) % 900 )); i=$((i + 1)); done | sort -n > "$PLAN"
   echo 0 > "$DONE"

@@ -8,13 +8,10 @@ on:
         description: "Optional note to add to today's log entry"
         required: false
         default: ""
-  # Scheduled safety net across the day (Harare is UTC+2):
-  # 07:15 UTC -> 09:15 Harare (morning)
-  # 11:30 UTC -> 13:30 Harare (midday)
-  # 15:45 UTC -> 17:45 Harare (afternoon)
-  # 20:20 UTC -> 22:20 Harare (evening)
+  # Scheduled runs across the day in the cloud (runs even when PC is offline):
+  # 06:15, 10:15, 14:15, 18:15, 21:15 UTC
   schedule:
-    - cron: "15 7,11,15,20 * * *"
+    - cron: "15 6,10,14,18,21 * * *"
 
 permissions:
   contents: write
@@ -45,9 +42,20 @@ jobs:
       - name: Write log and commit
         env:
           STREAK_NOTE: ${{ github.event.inputs.note }}
-          STREAK_MAX: "4"
         run: |
-          cargo run --release --quiet
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" -ge 21 ]; then
+              # Final scheduled run of the day: top up to the daily target (15-20)
+              COUNT=20
+            else
+              # 3 or 4 commits per earlier scheduled slot
+              COUNT=$(( (RANDOM % 2) + 3 ))
+            fi
+          else
+            COUNT=1
+          fi
+          cargo run --release --quiet -- --count "$COUNT"
 
       - name: Push
         run: |
