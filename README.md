@@ -4,12 +4,12 @@
 
 A daily Rust log, written and committed by a small Rust binary (`streak`) running in GitHub Actions.
 
-Each day gets an entry in `log/YYYY-MM.md` with a Rust tip and checkpoint commits, targeting **500 commits per day** by default (overridable via `STREAK_MAX`).
+Each day gets an entry in `log/YYYY-MM.md` with a Rust tip and checkpoint commits, targeting **1000 commits per day** across **5 daily runs** (overridable via `STREAK_MAX`).
 
 ## How it runs
 
-1. **GitHub cron (cloud schedule).** The workflow runs automatically across 6 UTC schedule slots (`01:23`, `05:23`, `09:23`, `13:23`, `17:23`, and `20:23` UTC). The first 5 slots commit 100 each (500 total), and the `20:23` UTC slot tops up any missed runs up to 500 — pushing in batches of 100 commits at a time.
-2. **OpenClaw / manual dispatch.** An OpenClaw automation runs `openclaw/trigger.sh` every 10 minutes, picking 5 random times between 08:00 and 22:59 and dispatching 100 commits per slot. `trigger.sh --show` prints today's plan; `trigger.sh --now` dispatches right away and tops up to 500.
+1. **GitHub cron (cloud schedule).** The workflow runs automatically 5 times a day across UTC schedule slots (`02:23`, `07:23`, `12:23`, `16:23`, and `20:23` UTC). The first 4 slots commit 200 each (800 total), and the `20:23` UTC slot commits the final 200 and tops up any missed runs up to 1000 — pushing in batches of 100 commits at a time.
+2. **OpenClaw / manual dispatch.** An OpenClaw automation runs `openclaw/trigger.sh` every 10 minutes, picking 5 random times between 08:00 and 22:59 and dispatching 200 commits per slot (1000/day total). `trigger.sh --show` prints today's plan; `trigger.sh --now` dispatches right away and tops up to 1000.
 
 ## Set up the OpenClaw automation
 
@@ -25,7 +25,7 @@ cargo test
 cargo run -- --dry-run --count 10 --note "what I did today"
 ```
 
-Environment variables: `STREAK_NOTE` (the note), `STREAK_MAX` (daily commit cap, default `500`), `STREAK_COUNT` (commits per invocation, default `1`), `STREAK_DATE` (override the date, `YYYY-MM-DD`).
+Environment variables: `STREAK_NOTE` (the note), `STREAK_MAX` (daily commit cap, default `1000`), `STREAK_COUNT` (commits per invocation, default `1`), `STREAK_DATE` (override the date, `YYYY-MM-DD`).
 
 ## Note
 
