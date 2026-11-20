@@ -1,17 +1,21 @@
 name: streak
 
 on:
-  # OpenClaw triggers this daily from your machine (see openclaw/ in README).
+  # OpenClaw or manual dispatch (see openclaw/ in README).
   workflow_dispatch:
     inputs:
       note:
         description: "Optional note to add to today's log entry"
         required: false
         default: ""
-  # Scheduled runs across the day in the cloud (runs even when PC is offline):
-  # 06:15, 10:15, 14:15, 18:15, 21:15 UTC
+      count:
+        description: "Commits to make in this run (0 = top up to daily target of 500)"
+        required: false
+        default: "0"
+  # 6 scheduled slots across the UTC day (off-peak minute :23 to reduce cron lag):
+  # 01:23, 05:23, 09:23, 13:23, 17:23 (100 commits each = 500), plus 20:23 safety top-up.
   schedule:
-    - cron: "15 6,10,14,18,21 * * *"
+    - cron: "23 1,5,9,13,17,20 * * *"
 
 permissions:
   contents: write
@@ -30,8 +34,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Test
-        run: cargo test --quiet
+      - name: Test & build
+        run: |
+          cargo test --quiet
+          cargo build --release --quiet
 
       - name: Configure git author
         # The author email must belong to your account or the commits won't turn the graph green.
@@ -39,25 +45,40 @@ jobs:
           git config user.name "Kolgrim33"
           git config user.email "252664188+Kolgrim33@users.noreply.github.com"
 
-      - name: Write log and commit
+      - name: Write log, commit, and push in batches
         env:
           STREAK_NOTE: ${{ github.event.inputs.note }}
+          INPUT_COUNT: ${{ github.event.inputs.count }}
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            HOUR=$(date -u +%H)
-            if [ "$HOUR" -ge 21 ]; then
-              # Final scheduled run of the day: top up to the daily target (15-20)
-              COUNT=20
+            HOUR=$((10#$(date -u +%H)))
+            if [ "$HOUR" -ge 19 ]; then
+              # Final scheduled run of the day: top up any missed commits to 500
+              COUNT=500
             else
-              # 3 or 4 commits per earlier scheduled slot
-              COUNT=$(( (RANDOM % 2) + 3 ))
+              # 100 commits per earlier scheduled slot (5 slots x 100 = 500)
+              COUNT=100
             fi
           else
-            COUNT=1
+            if [ -n "$INPUT_COUNT" ] && [ "$INPUT_COUNT" -gt 0 ] 2>/dev/null; then
+              COUNT="$INPUT_COUNT"
+            else
+              COUNT=500
+            fi
           fi
-          cargo run --release --quiet -- --count "$COUNT"
 
-      - name: Push
-        run: |
-          git pull --rebase origin main
-          git push origin HEAD:main
+          BATCH=100
+          REMAINING="$COUNT"
+          while [ "$REMAINING" -gt 0 ]; do
+            STEP=$(( REMAINING < BATCH ? REMAINING : BATCH ))
+            BEFORE=$(git rev-parse HEAD)
+            ./target/release/streak --count "$STEP"
+            AFTER=$(git rev-parse HEAD)
+            if [ "$BEFORE" = "$AFTER" ]; then
+              break
+            fi
+            git pull --rebase origin main
+            git push origin HEAD:main
+            STREAK_NOTE=""
+            REMAINING=$(( REMAINING - STEP ))
+          done

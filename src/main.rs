@@ -4,7 +4,7 @@
 //!
 //! Env:
 //!   STREAK_NOTE   note to log (OpenClaw passes this through workflow_dispatch)
-//!   STREAK_MAX    daily cap on commits, default 20 (or 15..=20 via daily_target)
+//!   STREAK_MAX    daily cap on commits, default 500
 //!   STREAK_COUNT  number of commits to make in this invocation, default 1
 //!   STREAK_DATE   override the date as YYYY-MM-DD (testing)
 
@@ -95,9 +95,11 @@ fn tip_for(date: &Date) -> &'static str {
     TIPS[(day_hash(date) >> 8) as usize % TIPS.len()]
 }
 
-/// Deterministic daily target between 15 and 20 commits inclusive.
-fn daily_target(date: &Date) -> u64 {
-    15 + (day_hash(date) % 6)
+const DEFAULT_DAILY_TARGET: u64 = 500;
+
+/// Default daily commit target.
+fn daily_target() -> u64 {
+    DEFAULT_DAILY_TARGET
 }
 
 fn git(args: &[&str]) {
@@ -135,7 +137,7 @@ fn main() {
     let max: u64 = env::var("STREAK_MAX")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or_else(|| daily_target(&date));
+        .unwrap_or_else(daily_target);
     let count: u64 = arg_count
         .or_else(|| env::var("STREAK_COUNT").ok().and_then(|v| v.parse().ok()))
         .unwrap_or(1)
@@ -262,14 +264,16 @@ mod tests {
     }
 
     #[test]
-    fn daily_target_varies_between_15_and_20() {
-        let mut seen = std::collections::HashSet::new();
-        for day in 1..=30 {
-            let date = Date { y: 2026, m: 11, d: day };
-            let target = daily_target(&date);
-            assert!((15..=20).contains(&target), "got {target}");
-            seen.insert(target);
+    fn daily_target_is_500() {
+        assert_eq!(daily_target(), 500);
+    }
+
+    #[test]
+    fn counts_500_commits_in_a_day() {
+        let mut log = String::from("# Rust log 2026-11\n\n## 2026-11-20\n\n- tip: x\n");
+        for i in 2..=500 {
+            log.push_str(&format!("- checkpoint {i}\n"));
         }
-        assert!(seen.len() > 1, "expected daily_target to vary across days");
+        assert_eq!(day_count(&log, "## 2026-11-20"), 500);
     }
 }
