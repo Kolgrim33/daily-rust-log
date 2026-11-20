@@ -12,6 +12,11 @@ on:
         description: "Commits to make in this run (0 = top up to daily target of 3000)"
         required: false
         default: "0"
+      force:
+        description: "Ignore the daily cap and force the requested commit count"
+        type: boolean
+        required: false
+        default: false
   # 5 scheduled slots across the UTC day (off-peak minute :23 to reduce cron lag):
   # 02:23, 07:23, 12:23, 16:23 (600 commits each = 2400), plus 20:23 (final 600 / top-up to 3000).
   schedule:
@@ -49,7 +54,9 @@ jobs:
         env:
           STREAK_NOTE: ${{ github.event.inputs.note }}
           INPUT_COUNT: ${{ github.event.inputs.count }}
+          INPUT_FORCE: ${{ github.event.inputs.force }}
         run: |
+          FORCE_FLAG=""
           if [ "${{ github.event_name }}" = "schedule" ]; then
             HOUR=$((10#$(date -u +%H)))
             if [ "$HOUR" -ge 19 ]; then
@@ -60,6 +67,9 @@ jobs:
               COUNT=600
             fi
           else
+            if [ "$INPUT_FORCE" = "true" ]; then
+              FORCE_FLAG="--force"
+            fi
             if [ -n "$INPUT_COUNT" ] && [ "$INPUT_COUNT" -gt 0 ] 2>/dev/null; then
               COUNT="$INPUT_COUNT"
             else
@@ -72,7 +82,7 @@ jobs:
           while [ "$REMAINING" -gt 0 ]; do
             STEP=$(( REMAINING < BATCH ? REMAINING : BATCH ))
             BEFORE=$(git rev-parse HEAD)
-            ./target/release/streak --count "$STEP"
+            ./target/release/streak $FORCE_FLAG --count "$STEP"
             AFTER=$(git rev-parse HEAD)
             if [ "$BEFORE" = "$AFTER" ]; then
               break
