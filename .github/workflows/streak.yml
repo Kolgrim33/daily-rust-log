@@ -9,11 +9,11 @@ on:
         required: false
         default: ""
       count:
-        description: "Commits to make in this run (0 = top up to daily target of 1000)"
+        description: "Commits to make in this run (0 = top up to daily target of 3000)"
         required: false
         default: "0"
   # 5 scheduled slots across the UTC day (off-peak minute :23 to reduce cron lag):
-  # 02:23, 07:23, 12:23, 16:23 (200 commits each = 800), plus 20:23 (final 200 / top-up to 1000).
+  # 02:23, 07:23, 12:23, 16:23 (600 commits each = 2400), plus 20:23 (final 600 / top-up to 3000).
   schedule:
     - cron: "23 2,7,12,16,20 * * *"
 
@@ -53,21 +53,21 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             HOUR=$((10#$(date -u +%H)))
             if [ "$HOUR" -ge 19 ]; then
-              # Final scheduled run of the day: complete the last 200 and top up any missed commits to 1000
-              COUNT=1000
+              # Final scheduled run of the day: complete the last 600 and top up any missed commits to 3000
+              COUNT=3000
             else
-              # 200 commits per earlier scheduled slot (5 runs x 200 = 1000)
-              COUNT=200
+              # 600 commits per earlier scheduled slot (5 runs x 600 = 3000)
+              COUNT=600
             fi
           else
             if [ -n "$INPUT_COUNT" ] && [ "$INPUT_COUNT" -gt 0 ] 2>/dev/null; then
               COUNT="$INPUT_COUNT"
             else
-              COUNT=1000
+              COUNT=3000
             fi
           fi
 
-          BATCH=100
+          BATCH=200
           REMAINING="$COUNT"
           while [ "$REMAINING" -gt 0 ]; do
             STEP=$(( REMAINING < BATCH ? REMAINING : BATCH ))
@@ -81,4 +81,7 @@ jobs:
             git push origin HEAD:main
             STREAK_NOTE=""
             REMAINING=$(( REMAINING - STEP ))
+            if [ "$REMAINING" -gt 0 ]; then
+              sleep 1
+            fi
           done
