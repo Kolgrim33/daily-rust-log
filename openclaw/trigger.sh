@@ -1,10 +1,10 @@
 #!/usr/bin/env sh
 # Run by OpenClaw every 10 minutes. On the first run of each day it picks
 # 5 random times between 08:00 and 22:59 (local). Each time a picked slot
-# passes, it dispatches the streak workflow for 600 commits (3000/day total).
+# passes, it dispatches the streak workflow for 1200 commits (6000/day total).
 #
 #   trigger.sh                    normal (scheduled) mode
-#   trigger.sh --now [note] [n]   dispatch immediately (n defaults to 0 = top up to 3000)
+#   trigger.sh --now [note] [n]   dispatch immediately (n defaults to 0 = top up to 6000)
 #   trigger.sh --show             print today's plan
 set -eu
 REPO="Kolgrim33/daily-rust-log"
@@ -17,8 +17,8 @@ mkdir -p "$STATE"
 rand() { od -An -N2 -tu2 /dev/urandom | tr -d ' '; }   # 0..65535
 
 dispatch() {
-  gh workflow run streak.yml -R "$REPO" -f note="${1:-}" -f count="${2:-600}"
-  echo "dispatched streak.yml on $REPO (count=${2:-600})"
+  gh workflow run streak.yml -R "$REPO" -f note="${1:-}" -f count="${2:-1200}"
+  echo "dispatched streak.yml on $REPO (count=${2:-1200})"
 }
 
 if [ "${1:-}" = "--now" ]; then dispatch "${2:-manual}" "${3:-0}"; exit 0; fi
@@ -47,5 +47,5 @@ if [ "$due" -le "$done_n" ]; then
   exit 0
 fi
 
-dispatch "random slot $((done_n + 1)) at $(date +%H:%M)" 600
+dispatch "random slot $((done_n + 1)) at $(date +%H:%M)" 1200
 echo $((done_n + 1)) > "$DONE"

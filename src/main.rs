@@ -4,7 +4,7 @@
 //!
 //! Env:
 //!   STREAK_NOTE   note to log (OpenClaw passes this through workflow_dispatch)
-//!   STREAK_MAX    daily cap on commits, default 3000
+//!   STREAK_MAX    daily cap on commits, default 6000
 //!   STREAK_COUNT  number of commits to make in this invocation, default 1
 //!   STREAK_DATE   override the date as YYYY-MM-DD (testing)
 
@@ -95,7 +95,7 @@ fn tip_for(date: &Date) -> &'static str {
     TIPS[(day_hash(date) >> 8) as usize % TIPS.len()]
 }
 
-const DEFAULT_DAILY_TARGET: u64 = 3000;
+const DEFAULT_DAILY_TARGET: u64 = 6000;
 
 /// Default daily commit target.
 fn daily_target() -> u64 {
@@ -264,16 +264,16 @@ mod tests {
     }
 
     #[test]
-    fn daily_target_is_3000() {
-        assert_eq!(daily_target(), 3000);
+    fn daily_target_is_6000() {
+        assert_eq!(daily_target(), 6000);
     }
 
     #[test]
-    fn counts_3000_commits_in_a_day() {
+    fn counts_6000_commits_in_a_day() {
         let mut log = String::from("# Rust log 2026-11\n\n## 2026-11-20\n\n- tip: x\n");
-        for i in 2..=3000 {
+        for i in 2..=6000 {
             log.push_str(&format!("- checkpoint {i}\n"));
         }
-        assert_eq!(day_count(&log, "## 2026-11-20"), 3000);
+        assert_eq!(day_count(&log, "## 2026-11-20"), 6000);
     }
 }

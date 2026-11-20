@@ -9,7 +9,7 @@ on:
         required: false
         default: ""
       count:
-        description: "Commits to make in this run (0 = top up to daily target of 3000)"
+        description: "Commits to make in this run (0 = top up to daily target of 6000)"
         required: false
         default: "0"
       force:
@@ -18,7 +18,7 @@ on:
         required: false
         default: false
   # 5 scheduled slots across the UTC day (off-peak minute :23 to reduce cron lag):
-  # 02:23, 07:23, 12:23, 16:23 (600 commits each = 2400), plus 20:23 (final 600 / top-up to 3000).
+  # 02:23, 07:23, 12:23, 16:23 (1200 commits each = 4800), plus 20:23 (final 1200 / top-up to 6000).
   schedule:
     - cron: "23 2,7,12,16,20 * * *"
 
@@ -60,11 +60,11 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             HOUR=$((10#$(date -u +%H)))
             if [ "$HOUR" -ge 19 ]; then
-              # Final scheduled run of the day: complete the last 600 and top up any missed commits to 3000
-              COUNT=3000
+              # Final scheduled run of the day: complete the last 1200 and top up any missed commits to 6000
+              COUNT=6000
             else
-              # 600 commits per earlier scheduled slot (5 runs x 600 = 3000)
-              COUNT=600
+              # 1200 commits per earlier scheduled slot (5 runs x 1200 = 6000)
+              COUNT=1200
             fi
           else
             if [ "$INPUT_FORCE" = "true" ]; then
@@ -73,7 +73,7 @@ jobs:
             if [ -n "$INPUT_COUNT" ] && [ "$INPUT_COUNT" -gt 0 ] 2>/dev/null; then
               COUNT="$INPUT_COUNT"
             else
-              COUNT=3000
+              COUNT=6000
             fi
           fi
 
